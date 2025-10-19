@@ -1,0 +1,56 @@
+name: Deploy React App to VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # Step 4: Build the React app
+      - name: Build the app
+        run: npm run build
+        env:
+          VITE_BASE_URL: https://brooms.astraval.com  # Optional: Set Vite base URL if needed
+
+      # Step 5: Deploy to VPS
+      - name: Deploy to VPS
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          # Install SSH client
+          sudo apt-get update && sudo apt-get install -y openssh-client
+          
+          # Set up SSH key
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          
+          # Add VPS host to known_hosts
+          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
+          
+          # Copy built files to VPS
+          rsync -avz --delete -e "ssh -i ~/.ssh/id_ed25519" dist/ $VPS_USER@$VPS_HOST:$VPS_DEPLOY_PATH/
+
+          # Restart Apache (optional, if needed)
+          ssh -i ~/.ssh/id_ed25519 $VPS_USER@$VPS_HOST "sudo systemctl restart apache2"
